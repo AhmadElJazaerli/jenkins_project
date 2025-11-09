@@ -1,51 +1,54 @@
 pipeline {
-    agent any
+  agent any
 
-    environment {
-        VIRTUAL_ENV = 'venv'
+  options { timestamps() }
+
+  stages {
+    stage('Setup') {
+      steps {
+        bat '''
+          where python
+          python -m venv venv
+          venv\\Scripts\\python -m pip install --upgrade pip
+          if exist requirements.txt venv\\Scripts\\python -m pip install -r requirements.txt
+        '''
+      }
     }
 
-    stages {
-        stage('Setup') {
-            steps {
-                script {
-                    if (!fileExists("${env.WORKSPACE}/${VIRTUAL_ENV}")) {
-                        sh "python -m venv ${VIRTUAL_ENV}"
-                    }
-                    sh "source ${VIRTUAL_ENV}/bin/activate && pip install -r requirements.txt"
-                }
-            }
-        }
-
-        stage('Lint') {
-            steps {
-                script {
-                    sh "source ${VIRTUAL_ENV}/bin/activate && flake8 app.py"
-                }
-            }
-        }
-
-        stage('Test') {
-            steps {
-                script {
-                    sh "source ${VIRTUAL_ENV}/bin/activate && pytest"
-                }
-            }
-        }
-
-        stage('Deploy') {
-            steps {
-                script {
-                    // Deployment logic, e.g., pushing to a remote server
-                    echo "Deploying application..."
-                }
-            }
-        }
+    stage('Lint') {
+      steps {
+        bat '''
+          venv\\Scripts\\python -m pip install flake8
+          venv\\Scripts\\python -m flake8 .
+        '''
+      }
     }
 
-    post {
+    stage('Test') {
+      steps {
+        bat '''
+          venv\\Scripts\\python -m pip install pytest
+          venv\\Scripts\\python -m pytest --junitxml=reports\\junit.xml
+        '''
+      }
+      post {
         always {
-            cleanWs()
+          junit 'reports/junit.xml'
         }
+      }
     }
+
+    stage('Deploy') {
+      when { expression { return false } } // set your real deploy condition/steps here
+      steps {
+        bat 'echo Deploy step goes here'
+      }
+    }
+  }
+
+  post {
+    always {
+      cleanWs()
+    }
+  }
 }
