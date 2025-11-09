@@ -19,7 +19,7 @@ pipeline {
       steps {
         bat '''
           venv\\Scripts\\python -m pip install flake8
-          venv\\Scripts\\python -m flake8 --exclude=.venv,build,dist,__pycache__,*.egg-info .
+          venv\\Scripts\\python -m flake8 --exclude=.venv,build,dist,__pycache__ .
         '''
       }
     }
