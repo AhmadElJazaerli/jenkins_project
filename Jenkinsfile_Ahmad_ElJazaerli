@@ -1,54 +1,53 @@
 pipeline {
-  agent any
-
-  options { timestamps() }
-
-  stages {
-    stage('Setup') {
-      steps {
-        bat '''
-          where python
-          python -m venv venv
-          venv\\Scripts\\python -m pip install --upgrade pip
-          if exist requirements.txt venv\\Scripts\\python -m pip install -r requirements.txt
-        '''
-      }
+    agent any
+    environment {
+        VIRTUAL_ENV = 'venv'
     }
-
-    stage('Lint') {
-      steps {
-        bat '''
-          venv\\Scripts\\python -m pip install flake8
-          venv\\Scripts\\python -m flake8 --exclude=.venv,build,dist,__pycache__ .
-        '''
-      }
-    }
-
-    stage('Test') {
-      steps {
-        bat '''
-          venv\\Scripts\\python -m pip install pytest
-          venv\\Scripts\\python -m pytest --junitxml=reports\\junit.xml
-        '''
-      }
-      post {
-        always {
-          junit 'reports/junit.xml'
+    stages {
+        stage('Setup') {
+            steps {
+                script {
+                    if (!fileExists("${env.WORKSPACE}\\${VIRTUAL_ENV}")) {
+                        bat "py -m venv ${VIRTUAL_ENV}"
+                    }
+                    bat """
+                    call ${VIRTUAL_ENV}\\Scripts\\activate.bat
+                    pip install -r requirements.txt
+                    """
+                }
+            }
         }
-      }
+        stage('Lint') {
+            steps {
+                script {
+                    bat """
+                    call ${VIRTUAL_ENV}\\Scripts\\activate.bat
+                    flake8 app.py
+                    """
+                }
+            }
+        }
+        stage('Test') {
+            steps {
+                script {
+                    bat """
+                    call ${VIRTUAL_ENV}\\Scripts\\activate.bat
+                    pytest
+                    """
+                }
+            }
+        }
+        stage('Deploy') {
+            steps {
+                script {
+                    echo "Deploying application..."
+                }
+            }
+        }
     }
-
-    stage('Deploy') {
-      when { expression { return false } } // set your real deploy condition/steps here
-      steps {
-        bat 'echo Deploy step goes here'
-      }
+    post {
+        always {
+            cleanWs()
+        }
     }
-  }
-
-  post {
-    always {
-      cleanWs()
-    }
-  }
 }
