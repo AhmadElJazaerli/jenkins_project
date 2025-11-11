@@ -82,23 +82,8 @@ pipeline {
       }
       post {
         always {
-          script {
-            // Try to publish if HTML Publisher plugin exists; otherwise archive the files.
-            try {
-              // If plugin is missing, this call throws; we catch and fallback.
-              publishHTML(target: [
-                allowMissing: true,
-                alwaysLinkToLastBuild: true,
-                keepAll: true,
-                reportDir: 'coverage_html',
-                reportFiles: 'index.html',
-                reportName: 'Coverage Report'
-              ])
-            } catch (e) {
-              echo "HTML Publisher plugin not available. Archiving coverage_html instead."
-              archiveArtifacts artifacts: 'coverage_html/**', onlyIfSuccessful: false, fingerprint: false, allowEmptyArchive: true
-            }
-          }
+          // No publishHTML here (plugin missing) — just archive the report.
+          archiveArtifacts artifacts: 'coverage_html/**', onlyIfSuccessful: false, allowEmptyArchive: true
         }
       }
     }
