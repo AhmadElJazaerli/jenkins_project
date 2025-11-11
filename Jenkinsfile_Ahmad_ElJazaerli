@@ -72,11 +72,10 @@ pipeline {
             steps {
                 // Create a ZIP artifact (Windows-safe)
                 bat """
-                    if exist build.zip del /f /q build.zip
-                    powershell -NoLogo -NoProfile -Command ^
-                      "Compress-Archive -Path app.py, requirements.txt, tests\test_app.py -DestinationPath build.zip"
-                    echo Deploying artifact build.zip (placeholder).
-                """
+                if exist build.zip del /f /q build.zip
+                powershell -NoLogo -NoP -C "Compress-Archive -Path app.py,requirements.txt,tests -DestinationPath build.zip"
+                echo Deploy artifact build.zip
+            """
                 archiveArtifacts artifacts: 'build.zip', fingerprint: true
             }
         }
