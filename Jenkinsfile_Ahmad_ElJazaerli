@@ -1,134 +1,89 @@
 pipeline {
-  agent any
+    agent any
 
-  environment {
-    VENV_DIR = '.venv'
-  }
-
-  stages {
-    stage('Checkout') {
-      steps { checkout scm }
+    environment {
+        VIRTUAL_ENV = 'venv'
     }
 
-    stage('Setup') {
-      steps {
-        script {
-          def PY = isUnix() ? 'python3' : 'py -3'
-          if (isUnix()) {
-            sh """
-              ${PY} -m venv ${VENV_DIR}
-              ${VENV_DIR}/bin/python -m pip install --upgrade pip
-              ${VENV_DIR}/bin/pip install -r requirements.txt
+    stages {
+        stage('Setup') {
+            steps {
+                script {
+                    // Create venv if missing
+                    if (!fileExists("${env.WORKSPACE}\\${VIRTUAL_ENV}")) {
+                        bat "python -m venv %VIRTUAL_ENV%"
+                    }
+                    // Install deps + tooling
+                    bat """
+                        call %VIRTUAL_ENV%\\Scripts\\activate
+                        pip install -r requirements.txt
+                        pip install coverage bandit
+                    """
+                }
+            }
+        }
+
+        stage('Lint') {
+            steps {
+                bat """
+                    call %VIRTUAL_ENV%\\Scripts\\activate
+                    flake8 --exit-zero
+                """
+            }
+        }
+
+        stage('Test') {
+            steps {
+                bat "call %VIRTUAL_ENV%\\Scripts\\activate && python -m pytest -q"
+            }
+        }
+
+        stage('Coverage') {
+            steps {
+                bat """
+                    call %VIRTUAL_ENV%\\Scripts\\activate
+                    coverage run -m pytest
+                    coverage xml -o coverage.xml
+                    coverage html
+                """
+                archiveArtifacts artifacts: 'coverage.xml, htmlcov/**', fingerprint: true
+            }
+        }
+
+        stage('Security Scan') {
+            steps {
+                script {
+                    def status = bat(
+                        returnStatus: true,
+                        script: """
+                            call %VIRTUAL_ENV%\\Scripts\\activate
+                            bandit -r . -f json -o bandit-report.json
+                        """
+                    )
+                    archiveArtifacts artifacts: 'bandit-report.json', fingerprint: true
+                    if (status != 0) {
+                        unstable("Bandit found security issues. See bandit-report.json.")
+                    }
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                // Create a ZIP artifact (Windows-safe)
+                bat """
+                if exist build.zip del /f /q build.zip
+                powershell -NoLogo -NoP -C "Compress-Archive -Path app.py,requirements.txt,tests -DestinationPath build.zip"
+                echo Deploy artifact build.zip
             """
-          } else {
-            bat """
-              ${PY} -m venv ${VENV_DIR}
-              call ${VENV_DIR}\\Scripts\\python -m pip install --upgrade pip
-              call ${VENV_DIR}\\Scripts\\pip install -r requirements.txt
-            """
-          }
+                archiveArtifacts artifacts: 'build.zip', fingerprint: true
+            }
         }
-      }
     }
 
-    stage('Lint') {
-      steps {
-        script {
-          if (isUnix()) sh "${VENV_DIR}/bin/flake8 app.py"
-          else          bat "call ${VENV_DIR}\\Scripts\\flake8 app.py"
-        }
-      }
-    }
-
-    stage('Test') {
-      steps {
-        script {
-          if (isUnix()) {
-            withEnv(["PYTHONPATH=${env.WORKSPACE}"]) {
-              sh "${VENV_DIR}/bin/pytest -q"
-            }
-          } else {
-            withEnv(["PYTHONPATH=${env.WORKSPACE}"]) {
-              bat "call ${VENV_DIR}\\Scripts\\pytest -q"
-            }
-          }
-        }
-      }
-    }
-
-    stage('Coverage') {
-      steps {
-        script {
-          if (isUnix()) {
-            withEnv(["PYTHONPATH=${env.WORKSPACE}"]) {
-              sh """
-                ${VENV_DIR}/bin/coverage erase
-                ${VENV_DIR}/bin/coverage run -m pytest
-                ${VENV_DIR}/bin/coverage html -d coverage_html
-              """
-            }
-          } else {
-            withEnv(["PYTHONPATH=${env.WORKSPACE}"]) {
-              bat """
-                call ${VENV_DIR}\\Scripts\\coverage erase
-                call ${VENV_DIR}\\Scripts\\coverage run -m pytest
-                call ${VENV_DIR}\\Scripts\\coverage html -d coverage_html
-              """
-            }
-          }
-        }
-      }
-      post {
+    post {
         always {
-          publishHTML(target: [
-            allowMissing: true,
-            alwaysLinkToLastBuild: true,
-            keepAll: true,
-            reportDir: 'coverage_html',
-            reportFiles: 'index.html',
-            reportName: 'Coverage Report'
-          ])
+            cleanWs()
         }
-      }
     }
-
-    stage('Security Scan') {
-      steps {
-        script {
-          if (isUnix())
-            sh "${VENV_DIR}/bin/bandit -r . -x ${VENV_DIR} -f txt -o bandit_report.txt || true"
-          else
-            bat "call ${VENV_DIR}\\Scripts\\bandit -r . -x ${VENV_DIR} -f txt -o bandit_report.txt || exit /b 0"
-        }
-      }
-      post {
-        always { archiveArtifacts artifacts: 'bandit_report.txt', onlyIfSuccessful: false }
-      }
-    }
-
-    stage('Package') {
-      steps {
-        script {
-          if (isUnix())
-            sh "${VENV_DIR}/bin/python scripts/package_app.py"
-          else
-            bat "call ${VENV_DIR}\\Scripts\\python scripts\\package_app.py"
-        }
-      }
-      post {
-        success { archiveArtifacts artifacts: 'dist/', fingerprint: true }
-      }
-    }
-
-    stage('Deploy') {
-      steps {
-        script {
-          if (isUnix())
-            sh "bash scripts/deploy_local.sh"
-          else
-            bat "powershell -ExecutionPolicy Bypass -File scripts\\deploy_local.ps1"
-        }
-      }
-    }
-  }
 }
