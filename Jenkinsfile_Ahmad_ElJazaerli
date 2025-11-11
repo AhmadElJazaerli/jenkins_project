@@ -19,12 +19,14 @@ pipeline {
               ${PY} -m venv ${VENV_DIR}
               ${VENV_DIR}/bin/python -m pip install --upgrade pip
               ${VENV_DIR}/bin/pip install -r requirements.txt
+              ${VENV_DIR}/bin/pip install coverage bandit
             """
           } else {
             bat """
               ${PY} -m venv ${VENV_DIR}
               call ${VENV_DIR}\\Scripts\\python -m pip install --upgrade pip
               call ${VENV_DIR}\\Scripts\\pip install -r requirements.txt
+              call ${VENV_DIR}\\Scripts\\pip install coverage bandit
             """
           }
         }
@@ -62,17 +64,17 @@ pipeline {
           if (isUnix()) {
             withEnv(["PYTHONPATH=${env.WORKSPACE}"]) {
               sh """
-                ${VENV_DIR}/bin/coverage erase
-                ${VENV_DIR}/bin/coverage run -m pytest
-                ${VENV_DIR}/bin/coverage html -d coverage_html
+                ${VENV_DIR}/bin/python -m coverage erase
+                ${VENV_DIR}/bin/python -m coverage run -m pytest
+                ${VENV_DIR}/bin/python -m coverage html -d coverage_html
               """
             }
           } else {
             withEnv(["PYTHONPATH=${env.WORKSPACE}"]) {
               bat """
-                call ${VENV_DIR}\\Scripts\\coverage erase
-                call ${VENV_DIR}\\Scripts\\coverage run -m pytest
-                call ${VENV_DIR}\\Scripts\\coverage html -d coverage_html
+                call ${VENV_DIR}\\Scripts\\python -m coverage erase
+                call ${VENV_DIR}\\Scripts\\python -m coverage run -m pytest
+                call ${VENV_DIR}\\Scripts\\python -m coverage html -d coverage_html
               """
             }
           }
@@ -80,14 +82,23 @@ pipeline {
       }
       post {
         always {
-          publishHTML(target: [
-            allowMissing: true,
-            alwaysLinkToLastBuild: true,
-            keepAll: true,
-            reportDir: 'coverage_html',
-            reportFiles: 'index.html',
-            reportName: 'Coverage Report'
-          ])
+          script {
+            // Try to publish if HTML Publisher plugin exists; otherwise archive the files.
+            try {
+              // If plugin is missing, this call throws; we catch and fallback.
+              publishHTML(target: [
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'coverage_html',
+                reportFiles: 'index.html',
+                reportName: 'Coverage Report'
+              ])
+            } catch (e) {
+              echo "HTML Publisher plugin not available. Archiving coverage_html instead."
+              archiveArtifacts artifacts: 'coverage_html/**', onlyIfSuccessful: false, fingerprint: false, allowEmptyArchive: true
+            }
+          }
         }
       }
     }
@@ -96,9 +107,9 @@ pipeline {
       steps {
         script {
           if (isUnix())
-            sh "${VENV_DIR}/bin/bandit -r . -x ${VENV_DIR} -f txt -o bandit_report.txt || true"
+            sh "${VENV_DIR}/bin/python -m bandit -r . -x ${VENV_DIR} -f txt -o bandit_report.txt || true"
           else
-            bat "call ${VENV_DIR}\\Scripts\\bandit -r . -x ${VENV_DIR} -f txt -o bandit_report.txt || exit /b 0"
+            bat "call ${VENV_DIR}\\Scripts\\python -m bandit -r . -x ${VENV_DIR} -f txt -o bandit_report.txt || exit /b 0"
         }
       }
       post {
@@ -116,7 +127,7 @@ pipeline {
         }
       }
       post {
-        success { archiveArtifacts artifacts: 'dist/', fingerprint: true }
+        success { archiveArtifacts artifacts: 'dist/**', fingerprint: true, allowEmptyArchive: true }
       }
     }
 
