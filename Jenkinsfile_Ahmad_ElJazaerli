@@ -104,20 +104,17 @@ pipeline {
     stage('Package') {
       steps {
         script {
-          // 1) If you committed scripts/package_app.py, prefer it.
           if (fileExists('scripts/package_app.py')) {
             if (isUnix())
               sh "${VENV_DIR}/bin/python scripts/package_app.py"
             else
               bat "call ${VENV_DIR}\\Scripts\\python scripts\\package_app.py"
           } else if (fileExists('pyproject.toml') || fileExists('setup.cfg') || fileExists('setup.py')) {
-            // 2) Standard Python packaging (wheel/sdist) if config exists
             if (isUnix())
               sh "${VENV_DIR}/bin/python -m build"
             else
               bat "call ${VENV_DIR}\\Scripts\\python -m build"
           } else {
-            // 3) Last resort: zip up the app to dist/
             if (isUnix()) {
               sh """
                 rm -rf dist || true
@@ -143,14 +140,17 @@ pipeline {
 
     stage('Deploy') {
       when {
-        expression { return fileExists('dist') }
+        expression {
+          isUnix() ? fileExists('scripts/deploy_local.sh') : fileExists('scripts\\deploy_local.ps1')
+        }
       }
       steps {
         script {
-          if (isUnix())
+          if (isUnix()) {
             sh "bash scripts/deploy_local.sh"
-          else
-            bat "powershell -ExecutionPolicy Bypass -File scripts\\deploy_local.ps1"
+          } else {
+            bat "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\deploy_local.ps1"
+          }
         }
       }
     }
