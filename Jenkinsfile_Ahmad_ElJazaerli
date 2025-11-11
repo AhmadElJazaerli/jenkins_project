@@ -74,7 +74,7 @@ pipeline {
                 bat """
                     if exist build.zip del /f /q build.zip
                     powershell -NoLogo -NoProfile -Command ^
-                      "Compress-Archive -Path app.py, requirements.txt, test_app.py -DestinationPath build.zip"
+                      "Compress-Archive -Path app.py, requirements.txt, tests\test_app.py -DestinationPath build.zip"
                     echo Deploying artifact build.zip (placeholder).
                 """
                 archiveArtifacts artifacts: 'build.zip', fingerprint: true
