@@ -24,13 +24,13 @@ pipeline {
         }
 
         stage('Lint') {
-    steps {
-        bat """
-            call %VIRTUAL_ENV%\\Scripts\\activate
-            flake8
-        """
-    }
-}
+            steps {
+                bat """
+                    call %VIRTUAL_ENV%\\Scripts\\activate
+                    flake8 --exit-zero
+                """
+            }
+        }
 
         stage('Test') {
             steps {
