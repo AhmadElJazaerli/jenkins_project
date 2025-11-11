@@ -25,10 +25,12 @@ pipeline {
 
         stage('Lint') {
             steps {
-                // NOTE: use '.' instead of '*.py' on Windows
-                bat "call %VIRTUAL_ENV%\\Scripts\\activate && flake8 ."
-            }
+                bat """
+                call %VIRTUAL_ENV%\\Scripts\\activate
+                flake8 . --exclude=.venv
+            """
         }
+    }
 
         stage('Test') {
             steps {
