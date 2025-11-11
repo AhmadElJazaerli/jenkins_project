@@ -19,14 +19,14 @@ pipeline {
               ${PY} -m venv ${VENV_DIR}
               ${VENV_DIR}/bin/python -m pip install --upgrade pip
               ${VENV_DIR}/bin/pip install -r requirements.txt
-              ${VENV_DIR}/bin/pip install coverage bandit
+              ${VENV_DIR}/bin/pip install coverage bandit build
             """
           } else {
             bat """
               ${PY} -m venv ${VENV_DIR}
               call ${VENV_DIR}\\Scripts\\python -m pip install --upgrade pip
               call ${VENV_DIR}\\Scripts\\pip install -r requirements.txt
-              call ${VENV_DIR}\\Scripts\\pip install coverage bandit
+              call ${VENV_DIR}\\Scripts\\pip install coverage bandit build
             """
           }
         }
@@ -82,7 +82,6 @@ pipeline {
       }
       post {
         always {
-          // No publishHTML here (plugin missing) — just archive the report.
           archiveArtifacts artifacts: 'coverage_html/**', onlyIfSuccessful: false, allowEmptyArchive: true
         }
       }
@@ -105,18 +104,47 @@ pipeline {
     stage('Package') {
       steps {
         script {
-          if (isUnix())
-            sh "${VENV_DIR}/bin/python scripts/package_app.py"
-          else
-            bat "call ${VENV_DIR}\\Scripts\\python scripts\\package_app.py"
+          // 1) If you committed scripts/package_app.py, prefer it.
+          if (fileExists('scripts/package_app.py')) {
+            if (isUnix())
+              sh "${VENV_DIR}/bin/python scripts/package_app.py"
+            else
+              bat "call ${VENV_DIR}\\Scripts\\python scripts\\package_app.py"
+          } else if (fileExists('pyproject.toml') || fileExists('setup.cfg') || fileExists('setup.py')) {
+            // 2) Standard Python packaging (wheel/sdist) if config exists
+            if (isUnix())
+              sh "${VENV_DIR}/bin/python -m build"
+            else
+              bat "call ${VENV_DIR}\\Scripts\\python -m build"
+          } else {
+            // 3) Last resort: zip up the app to dist/
+            if (isUnix()) {
+              sh """
+                rm -rf dist || true
+                mkdir -p dist
+                tar -czf dist/app.tar.gz app.py requirements.txt || true
+              """
+            } else {
+              bat """
+                if exist dist rmdir /s /q dist
+                mkdir dist
+                powershell -NoProfile -Command "Compress-Archive -Path app.py, requirements.txt -DestinationPath dist\\app.zip -Force"
+              """
+            }
+          }
         }
       }
       post {
-        success { archiveArtifacts artifacts: 'dist/**', fingerprint: true, allowEmptyArchive: true }
+        always {
+          archiveArtifacts artifacts: 'dist/**', onlyIfSuccessful: false, allowEmptyArchive: true, fingerprint: true
+        }
       }
     }
 
     stage('Deploy') {
+      when {
+        expression { return fileExists('dist') }
+      }
       steps {
         script {
           if (isUnix())
