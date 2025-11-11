@@ -9,12 +9,11 @@ pipeline {
         stage('Setup') {
             steps {
                 script {
-                    if (!fileExists("${env.WORKSPACE}/${VIRTUAL_ENV}")) {
-                        sh "python -m venv ${VIRTUAL_ENV}"
+                    if (!fileExists("${env.WORKSPACE}\\${VIRTUAL_ENV}")) {
+                        bat "python -m venv %VIRTUAL_ENV%"
                     }
-                    // Install project deps + tools needed for new stages
-                    sh """
-                        source ${VIRTUAL_ENV}/bin/activate
+                    bat """
+                        call %VIRTUAL_ENV%\\Scripts\\activate
                         pip install -r requirements.txt
                         pip install coverage bandit
                     """
@@ -24,25 +23,24 @@ pipeline {
 
         stage('Lint') {
             steps {
-                sh "source ${VIRTUAL_ENV}/bin/activate && flake8 *.py"
+                bat "call %VIRTUAL_ENV%\\Scripts\\activate && flake8 *.py"
             }
         }
 
         stage('Test') {
             steps {
-                sh "source ${VIRTUAL_ENV}/bin/activate && pytest -q"
+                bat "call %VIRTUAL_ENV%\\Scripts\\activate && pytest -q"
             }
         }
 
         stage('Coverage') {
             steps {
-                sh """
-                    source ${VIRTUAL_ENV}/bin/activate
+                bat """
+                    call %VIRTUAL_ENV%\\Scripts\\activate
                     coverage run -m pytest
                     coverage xml -o coverage.xml
                     coverage html
                 """
-                // Save reports (HTML + XML) to the build
                 archiveArtifacts artifacts: 'coverage.xml, htmlcov/**', fingerprint: true
             }
         }
@@ -50,11 +48,10 @@ pipeline {
         stage('Security Scan') {
             steps {
                 script {
-                    // Run bandit and mark build 'Unstable' if issues are found (but do not fail)
-                    int status = sh(
+                    def status = bat(
                         returnStatus: true,
                         script: """
-                            source ${VIRTUAL_ENV}/bin/activate
+                            call %VIRTUAL_ENV%\\Scripts\\activate
                             bandit -r . -f json -o bandit-report.json
                         """
                     )
@@ -68,15 +65,11 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                script {
-                    // Minimal example deployment: create a tarball artifact.
-                    // Replace with your actual: e.g., scp/rsync to server, docker build & push, etc.
-                    sh """
-                        tar -czf build.tgz app.py requirements.txt tests || true
-                        echo "Deploying artifact build.tgz (placeholder). Replace with real steps."
-                    """
-                    archiveArtifacts artifacts: 'build.tgz', fingerprint: true
-                }
+                bat """
+                    tar -czf build.tgz app.py requirements.txt test_app.py
+                    echo Deploying artifact build.tgz (placeholder)
+                """
+                archiveArtifacts artifacts: 'build.tgz', fingerprint: true
             }
         }
     }
